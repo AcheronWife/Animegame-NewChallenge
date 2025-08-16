@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>异相仲裁生成器</title>
+    <style>
+        .container {
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+        }
+        .config-group {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f5f5f5;
+            border-radius: 4px;
+        }
+        .param-item {
+            margin: 10px 0;
+        }
+        label {
+            display: inline-block;
+            width: 120px;
+            font-weight: bold;
+        }
+        select, button {
+            padding: 8px 12px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            min-width: 200px;
+        }
+        .buff-display {
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px dashed #666;
+            border-radius: 4px;
+        }
+        .buff-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #333;
+        }
+        .buff-list {
+            margin-left: 20px;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            padding: 10px 20px;
+            font-size: 16px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>异相仲裁生成器</h2>
+        
+        <!-- 配置区域 -->
+        <div class="config-group">
+            <div class="param-item">
+                <label for="stage">选择关卡：</label>
+                <select id="stage" onchange="updateParams()">
+                    <option value="knight1">智械残局(1) - 骑士(一)</option>
+                    <option value="knight2">智械残局(1) - 骑士(二)</option>
+                    <option value="knight3">智械残局(1) - 骑士(三)</option>
+                    <option value="king">智械残局(1) - 将杀王棋</option>
+                </select>
+            </div>
+            
+            <div class="param-item" id="difficultyContainer" style="display: none;">
+                <label for="difficulty">选择难度：</label>
+                <select id="difficulty" onchange="updateParams()">
+                    <option value="normal">普通模式</option>
+                    <option value="hard">困难模式</option>
+                </select>
+            </div>
+            
+            <div class="param-item" id="buffContainer" style="display: none;">
+                <label for="buff">选择增益buff：</label>
+                <select id="buff">
+                    <option value="buff1">出奇制胜 - 队伍在场数量≠4时，全体伤害+60%</option>
+                    <option value="buff2">步骑协同 - 终结技无视40%防御，后续战技同样生效</option>
+                    <option value="buff3">锤砧战术 - 获友方护盾/治疗后，减伤25%+抗性穿透+20%（持续2回合）</option>
+                </select>
+            </div>
+        </div>
+        
+        <!-- 增益显示区域 -->
+        <div class="config-group">
+            <div class="buff-title">当前关卡紊乱增益：</div>
+            <div class="buff-list" id="chaosBuffDisplay">
+                <!-- 动态显示紊乱增益 -->
+            </div>
+        </div>
+        
+        <!-- 下载按钮 -->
+        <button onclick="generateConfig()">生成并下载配置</button>
+    </div>
+
+    <script>
+        // 关卡配置数据映射
+        const stageConfig = {
+            // 骑士(一)配置
+            knight1: {
+                stageId: "30501011",
+                battleType: "PEAK",
+                cycleCount: 6,
+                pathResonanceId: 0,
+                chaosBuffs: [
+                    "韧甲：敌方目标初始拥有2层【韧甲】，每层使敌方受到的伤害降低15%；敌方韧性被削减为0时降低1层【韧甲】"
+                ],
+                blessings: [
+                    { id: 3033001, level: 1 },
+                    { id: 3033006, level: 1 }
+                ],
+                monsters: [
+                    [
+                        { monster_id: 3012020, level: 95, amount: 1 },
+                        { monster_id: 3013010, level: 95, amount: 1 },
+                        { monster_id: 3013010, level: 95, amount: 1 },
+                        { monster_id: 3012020, level: 95, amount: 1 }
+                    ],
+                    [
+                        { monster_id: 3004012, level: 95, amount: 1 }
+                    ]
+                ]
+            },
+            // 骑士(二)配置
+            knight2: {
+                stageId: "30501012",
+                battleType: "PEAK",
+                cycleCount: 6,
+                pathResonanceId: 0,
+                chaosBuffs: [
+                    "淬火：敌方目标生命值每降低1%，我方对其造成的暴击伤害降低3%"
+                ],
+                blessings: [
+                    { id: 3033002, level: 1 },
+                    { id: 3033006, level: 1 }
+                ],
+                monsters: [
+                    [
+                        { monster_id: 4053010, level: 95, amount: 1 },
+                        { monster_id: 4053010, level: 95, amount: 1 }
+                    ],
+                    [
+                        { monster_id: 3014020, level: 95, amount: 1 }
+                    ]
+                ]
+            },
+            // 骑士(三)配置
+            knight3: {
+                stageId: "30501013",
+                battleType: "PEAK",
+                cycleCount: 6,
+                pathResonanceId: 0,
+                chaosBuffs: [
+                    "反相：敌方每次受到攻击时，对攻击者造成相当于敌方40%攻击力的物理伤害（不致命）",
+                    "守护：所有非精英敌方不会被削减生命值和韧性，效果抵抗+100%；所有精英被消灭后，剩余敌方也会被消灭"
+                ],
+                blessings: [
+                    { id: 3033003, level: 1 },
+                    { id: 3033004, level: 1 },
+                    { id: 3033006, level: 1 }
+                ],
+                monsters: [
+                    [
+                        { monster_id: 4032050, level: 95, amount: 1 },
+                        { monster_id: 4033010, level: 95, amount: 1 },
+                        { monster_id: 4032010, level: 95, amount: 1 },
+                        { monster_id: 4032050, level: 95, amount: 1 }
+                    ],
+                    [
+                        { monster_id: 4033010, level: 95, amount: 1 },
+                        { monster_id: 4033030, level: 95, amount: 1 },
+                        { monster_id: 4033010, level: 95, amount: 1 }
+                    ]
+                ]
+            },
+            // 将杀王棋配置（基础结构，难度差异动态补充）
+            king: {
+                battleType: "DEFAULT",
+                cycleCount: 6,
+                pathResonanceId: 0,
+                monsters: [
+                    [
+                        { monster_id: 4023010, level: 100, amount: 1 },  // 普通模式等级100，困难模式120
+                        { monster_id: 4023020, level: 100, amount: 1 }
+                    ],
+                    [
+                        { monster_id: 4044010, level: 100, amount: 1 }
+                    ]
+                ],
+                // 难度对应的配置
+                difficulties: {
+                    normal: {
+                        stageId: "30501021",
+                        chaosBuffs: [
+                            "反相+：敌方每次受到攻击时，对攻击者造成相当于敌方60%攻击力的物理伤害（不致命）",
+                            "吸能：敌方每次被攻击时使攻击者能量降低2点（满能量时不降）；敌方被消灭时恢复攻击者10点能量",
+                            "龟裂：我方受攻击时叠加【龟裂】，每层增伤6%（最多10层，不可驱散）；获友方护盾/治疗后双方解除3层"
+                        ],
+                        baseBlessingId: 3033006
+                    },
+                    hard: {
+                        stageId: "30501022",
+                        chaosBuffs: [
+                            "反相++：敌方每次受到攻击时，对攻击者造成相当于敌方80%攻击力的物理伤害（不致命）",
+                            "吸能++：敌方每次被攻击时使攻击者能量降低4点（满能量时不降）；敌方被消灭时恢复攻击者10点能量",
+                            "龟裂++：我方受攻击时叠加【龟裂++】，每层增伤12%（最多10层，不可驱散）；获友方护盾/治疗后双方解除3层"
+                        ],
+                        baseBlessingId: 3033007
+                    }
+                },
+                // 增益buff对应的id
+                buffs: {
+                    buff1: 3033010,
+                    buff2: 3033005,
+                    buff3: 3033017
+                }
+            }
+        };
+
+        // 更新参数显示（关卡/难度变化时）
+        function updateParams() {
+            const stage = document.getElementById("stage").value;
+            const difficultyContainer = document.getElementById("difficultyContainer");
+            const buffContainer = document.getElementById("buffContainer");
+            const chaosBuffDisplay = document.getElementById("chaosBuffDisplay");
+
+            // 显示/隐藏难度选择（仅将杀王棋显示）
+            if (stage === "king") {
+                difficultyContainer.style.display = "block";
+                buffContainer.style.display = "block";
+                // 根据当前难度更新紊乱增益
+                const difficulty = document.getElementById("difficulty").value;
+                const chaosBuffs = stageConfig.king.difficulties[difficulty].chaosBuffs;
+                renderChaosBuffs(chaosBuffs);
+            } else {
+                difficultyContainer.style.display = "none";
+                buffContainer.style.display = "none";
+                // 骑士关卡直接显示对应紊乱增益
+                const chaosBuffs = stageConfig[stage].chaosBuffs;
+                renderChaosBuffs(chaosBuffs);
+            }
+        }
+
+        // 渲染紊乱增益列表
+        function renderChaosBuffs(buffs) {
+            const chaosBuffDisplay = document.getElementById("chaosBuffDisplay");
+            chaosBuffDisplay.innerHTML = "";
+            buffs.forEach(buff => {
+                const item = document.createElement("div");
+                item.textContent = "- " + buff;
+                chaosBuffDisplay.appendChild(item);
+            });
+        }
+
+        // 生成配置文件
+        function generateConfig() {
+            const stage = document.getElementById("stage").value;
+            let config;
+
+            if (stage !== "king") {
+                // 骑士关卡配置
+                config = {
+                    battle_config: {
+                        battle_type: stageConfig[stage].battleType,
+                        blessings: stageConfig[stage].blessings,
+                        custom_stats: [],
+                        cycle_count: stageConfig[stage].cycleCount,
+                        stage_id: stageConfig[stage].stageId,
+                        path_resonance_id: stageConfig[stage].pathResonanceId,
+                        monsters: stageConfig[stage].monsters
+                    }
+                };
+            } else {
+                // 将杀王棋配置（结合难度和选择的buff）
+                const difficulty = document.getElementById("difficulty").value;
+                const buff = document.getElementById("buff").value;
+                const diffConfig = stageConfig.king.difficulties[difficulty];
+                const buffId = stageConfig.king.buffs[buff];
+
+                // 调整怪物等级（困难模式120级）
+                const monsters = JSON.parse(JSON.stringify(stageConfig.king.monsters));
+                if (difficulty === "hard") {
+                    monsters.forEach(wave => {
+                        wave.forEach(monster => {
+                            monster.level = 120;
+                        });
+                    });
+                }
+
+                config = {
+                    battle_config: {
+                        battle_type: stageConfig.king.battleType,
+                        blessings: [
+                            { id: diffConfig.baseBlessingId, level: 1 },
+                            { id: 3033014, level: 1 },  // 固定包含的blessing（参考文档）
+                            { id: 3033013, level: 1 },
+                            { id: buffId, level: 1 }     // 选择的增益buff
+                        ],
+                        custom_stats: [],
+                        cycle_count: stageConfig.king.cycleCount,
+                        stage_id: diffConfig.stageId,
+                        path_resonance_id: stageConfig.king.pathResonanceId,
+                        monsters: monsters
+                    }
+                };
+            }
+
+            // 生成JSON并下载
+            const jsonStr = JSON.stringify(config, null, 2);
+            const blob = new Blob([jsonStr], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `${getFileName(stage)}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // 获取下载文件名
+        function getFileName(stage) {
+            const stageNames = {
+                knight1: "骑士1",
+                knight2: "骑士2",
+                knight3: "骑士3",
+                king: `将杀王棋_${document.getElementById("difficulty").value === "normal" ? "普通" : "困难"}`
+            };
+            return `智械残局(1)_${stageNames[stage]}_配置`;
+        }
+
+        // 初始加载时更新显示
+        window.onload = updateParams;
+    </script>
+</body>
+</html>
